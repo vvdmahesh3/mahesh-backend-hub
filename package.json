@@ -1,0 +1,7 @@
+{
+  "name": "mahesh-ai-backend",
+  "version": "1.0.0",
+  "dependencies": {
+    "fuse.js": "^7.1.0"
+  }
+}
