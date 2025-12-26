@@ -3,7 +3,7 @@ const cors = require("cors");
 const fs = require("fs");
 const path = require("path");
 const Fuse = require("fuse.js");
-const yts = require("yt-search"); // New search engine
+const yts = require("yt-search");
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -11,10 +11,12 @@ const PORT = process.env.PORT || 10000;
 app.use(cors());
 app.use(express.json());
 
-// Load Resume Data
-const resumeData = JSON.parse(fs.readFileSync(path.join(__dirname, "resumeData.json"), "utf8"));
+// ---------------- LOAD RESUME DATA ----------------
+const resumeData = JSON.parse(
+  fs.readFileSync(path.join(__dirname, "resumeData.json"), "utf8")
+);
 
-// --- AI RESUME LOGIC ---
+// ---------------- AI RESUME LOGIC ----------------
 const corpus = [
   { key: "education", value: resumeData.education },
   { key: "internships", value: (resumeData.internships || []).join(" • ") },
@@ -22,34 +24,57 @@ const corpus = [
   { key: "projects", value: (resumeData.projects || []).join(" • ") },
   { key: "achievements", value: (resumeData.achievements || []).join(" • ") },
 ];
+
 const fuse = new Fuse(corpus, { keys: ["key", "value"], threshold: 0.4 });
 
 app.post("/api/ask-resume", (req, res) => {
   const { question } = req.body;
   const results = fuse.search(question || "");
-  res.json({ answer: results.length > 0 ? results[0].item.value : "🤔 I couldn't find that. Try asking about skills!" });
+  res.json({
+    answer:
+      results.length > 0
+        ? results[0].item.value
+        : "I couldn't find that. Try asking about skills.",
+  });
 });
 
-// --- 🎵 NEW REAL-TIME MUSIC SEARCH ---
+// ---------------- 🎵 MUSIC SEARCH API ----------------
 app.get("/api/music-search", async (req, res) => {
   const { q } = req.query;
   if (!q) return res.json([]);
 
   try {
-    const r = await yts(q);
-    const videos = r.videos.slice(0, 10); // Get top 10 results
-    const results = videos.map(v => ({
+    const r = await yts.search(q);
+
+    const videos = r.videos
+      .filter(
+        (v) =>
+          v.videoId &&
+          v.seconds &&
+          v.seconds > 60 &&
+          v.seconds < 600 &&
+          !v.isLive
+      )
+      .slice(0, 10);
+
+    const results = videos.map((v) => ({
       id: v.videoId,
       title: v.title,
-      artist: v.author.name,
+      artist: v.author?.name || "Unknown Artist",
       banner: v.image || v.thumbnail,
-      duration: v.timestamp
     }));
+
     res.json(results);
-  } catch (e) {
-    res.status(500).json({ error: "Search failed" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json([]);
   }
 });
 
-app.get("/", (req, res) => res.send("Mahesh Backend Hub Online"));
-app.listen(PORT, () => console.log(`Server live on ${PORT}`));
+app.get("/", (req, res) => {
+  res.send("Mahesh Backend Hub Online");
+});
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
