@@ -3,6 +3,7 @@ const cors = require("cors");
 const fs = require("fs");
 const path = require("path");
 const Fuse = require("fuse.js");
+const yts = require("yt-search"); // New search engine
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -10,18 +11,10 @@ const PORT = process.env.PORT || 10000;
 app.use(cors());
 app.use(express.json());
 
-// 1. Load Resume Data
-const resumePath = path.join(__dirname, "resumeData.json");
-let resumeData = JSON.parse(fs.readFileSync(resumePath, "utf8"));
+// Load Resume Data
+const resumeData = JSON.parse(fs.readFileSync(path.join(__dirname, "resumeData.json"), "utf8"));
 
-// 🎵 Music Library Metadata
-const library = [
-  { id: "vS3_7V99VEE", title: "Aakaasam Nee Haddhu Ra", artist: "G.V. Prakash Kumar", banner: "https://img.youtube.com/vi/vS3_7V99VEE/maxresdefault.jpg" },
-  { id: "dQw4w9WgXcQ", title: "Never Gonna Give You Up", artist: "Rick Astley", banner: "https://img.youtube.com/vi/dQw4w9WgXcQ/maxresdefault.jpg" },
-  { id: "Y-N0V0X1B4k", title: "Resilience Protocol", artist: "Mahesh Systems", banner: "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=400" }
-];
-
-// 2. Setup Fuzzy Search for AI
+// --- AI RESUME LOGIC ---
 const corpus = [
   { key: "education", value: resumeData.education },
   { key: "internships", value: (resumeData.internships || []).join(" • ") },
@@ -31,28 +24,32 @@ const corpus = [
 ];
 const fuse = new Fuse(corpus, { keys: ["key", "value"], threshold: 0.4 });
 
-// --- ROUTES ---
-
-// ✅ AI Assistant Endpoint (restored)
 app.post("/api/ask-resume", (req, res) => {
   const { question } = req.body;
-  if (!question) return res.status(400).json({ error: "Missing query" });
-
-  const results = fuse.search(question);
-  if (results.length > 0) {
-    return res.json({ answer: results[0].item.value });
-  }
-  res.json({ answer: "🤔 I couldn't find a direct answer. Try asking about skills or experience!" });
+  const results = fuse.search(question || "");
+  res.json({ answer: results.length > 0 ? results[0].item.value : "🤔 I couldn't find that. Try asking about skills!" });
 });
 
-// 🎵 Music Search Endpoint
-app.get("/api/music-search", (req, res) => {
+// --- 🎵 NEW REAL-TIME MUSIC SEARCH ---
+app.get("/api/music-search", async (req, res) => {
   const { q } = req.query;
-  if (!q) return res.json(library);
-  const filtered = library.filter(s => s.title.toLowerCase().includes(q.toLowerCase()));
-  res.json(filtered.length > 0 ? filtered : library);
+  if (!q) return res.json([]);
+
+  try {
+    const r = await yts(q);
+    const videos = r.videos.slice(0, 10); // Get top 10 results
+    const results = videos.map(v => ({
+      id: v.videoId,
+      title: v.title,
+      artist: v.author.name,
+      banner: v.image || v.thumbnail,
+      duration: v.timestamp
+    }));
+    res.json(results);
+  } catch (e) {
+    res.status(500).json({ error: "Search failed" });
+  }
 });
 
-app.get("/", (req, res) => res.send("Mahesh Backend Hub is Live."));
-
+app.get("/", (req, res) => res.send("Mahesh Backend Hub Online"));
 app.listen(PORT, () => console.log(`Server live on ${PORT}`));
